@@ -1,0 +1,1297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgniNet | 3D Earth Biome & Wildfire Intelligence</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- D3.js v7 & TopoJSON (Self-contained 3D Spherical Orthographic Canvas Engine - Zero Cross-Origin Iframe Security Errors) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+  <!-- Google Fonts: Fraunces (Editorial Serif), Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --glass-bg: rgba(255, 253, 249, 0.91);
+      --glass-border: rgba(231, 229, 228, 0.92);
+      --forest-pine: #14532d;
+      --tropical-green: #15803d;
+      --evergreen-pine: #065f46;
+      --desert-gold: #eab308;
+      --river-blue: #0284c7;
+      --wildfire-crimson: #dc2626;
+      --amber-harvest: #d97706;
+      --stone-ink: #1c1917;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--stone-ink);
+      background: #070c14;
+      overflow: hidden;
+      margin: 0;
+      padding: 0;
+    }
+    .serif-heading {
+      font-family: 'Fraunces', Georgia, serif;
+      letter-spacing: -0.02em;
+    }
+    .mono-num {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .frosted-glass {
+      background: var(--glass-bg);
+      backdrop-filter: blur(22px) saturate(160%);
+      -webkit-backdrop-filter: blur(22px) saturate(160%);
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 20px 44px -12px rgba(15, 23, 42, 0.28), 0 4px 12px -2px rgba(15, 23, 42, 0.08);
+    }
+    .card-white {
+      background: #ffffff;
+      border: 1px solid #e7e5e4;
+      box-shadow: 0 4px 14px rgba(28, 25, 23, 0.04);
+      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .card-white:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 24px -6px rgba(28, 25, 23, 0.12);
+      border-color: #14532d;
+    }
+    /* Custom warm scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #d6d3d1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #a8a29e;
+    }
+    /* Floating Popup Card over 3D Globe */
+    .globe-popup-card {
+      background: rgba(255, 253, 249, 0.97);
+      color: #1c1917;
+      border: 1px solid #d6d3d1;
+      border-radius: 18px;
+      box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.36);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      padding: 13px;
+      pointer-events: auto;
+      transition: opacity 0.16s ease;
+    }
+    /* Pulsing Critical Wildfire Rings */
+    @keyframes pulseRing {
+      0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.95; }
+      75% { transform: translate(-50%, -50%) scale(2.4); opacity: 0; }
+      100% { transform: translate(-50%, -50%) scale(2.4); opacity: 0; }
+    }
+    .globe-crit-pulse {
+      width: 22px;
+      height: 22px;
+      border-radius: 9999px;
+      background: rgba(220, 38, 38, 0.25);
+      border: 2px solid #dc2626;
+      position: absolute;
+      transform: translate(-50%, -50%);
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    .globe-crit-pulse::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 100%;
+      height: 100%;
+      border-radius: 9999px;
+      border: 2px solid #ef4444;
+      animation: pulseRing 2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+    }
+    /* Custom range sliders */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      border-radius: 999px;
+      background: #e7e5e4;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #14532d;
+      border: 2.5px solid #ffffff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body class="relative h-screen w-screen select-none">
+
+  <!-- FULL-VIEWPORT 3D SPHERICAL EARTH GLOBE -->
+  <div id="globeViewport" class="absolute inset-0 w-full h-full z-0">
+    <canvas id="globeCanvas" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
+    <div id="globeOverlay" class="pointer-events-none absolute inset-0 overflow-hidden"></div>
+    <div id="globePopupContainer" class="pointer-events-none absolute inset-0 overflow-hidden z-20"></div>
+  </div>
+
+  <!-- FLOATING TOP GLASS PILL NAVBAR -->
+  <header class="fixed top-3.5 left-3.5 right-3.5 z-30 flex justify-center pointer-events-none">
+    <div class="frosted-glass pointer-events-auto rounded-2xl px-4 py-2.5 w-full max-w-[1520px] flex flex-wrap items-center justify-between gap-2.5">
+      
+      <!-- Brand Identity -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[#14532d] to-[#15803d] flex items-center justify-center text-white shadow-md shrink-0">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1">
+            <circle cx="12" cy="12" r="9" />
+            <path stroke-linecap="round" d="M3.6 9h16.8M3.6 15h16.8M12 3a14.5 14.5 0 0 1 0 18M12 3a14.5 14.5 0 0 0 0 18" />
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="serif-heading text-xl font-bold text-stone-900 tracking-tight">AgniNet</span>
+            <span class="px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-emerald-900/10 text-emerald-900 border border-emerald-800/20">
+              3D Biome &amp; VIIRS 375m Globe
+            </span>
+          </div>
+          <p class="text-[11px] text-stone-500 font-medium hidden sm:block">
+            cosmicvisionaries.earth • Official Survey of India Boundaries • Reconciled Dual-Band °C Telemetry
+          </p>
+        </div>
+      </div>
+
+      <!-- Center View Switcher Pills -->
+      <nav class="flex items-center bg-stone-200/80 p-1 rounded-xl border border-stone-300/70">
+        <button id="tab-atlas" onclick="switchView('atlas')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-stone-900 shadow-sm cursor-pointer">
+          🌍 3D Biome &amp; Fire Atlas
+        </button>
+        <button id="tab-lab" onclick="switchView('lab')" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all text-stone-600 hover:text-stone-900 cursor-pointer">
+          🧪 AI &amp; Physics Lab (°C)
+        </button>
+      </nav>
+
+      <!-- Right Action Controls: Shading Modes, Biome Toggle, Labels Toggle, Focus India, CSV Upload -->
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- 3D Globe Shading Mode Selector -->
+        <div class="hidden lg:flex items-center bg-stone-200/80 p-1 rounded-xl border border-stone-300/70 text-[11px] font-semibold">
+          <button id="mode-biome" onclick="setGlobeMode('biome')" class="px-2.5 py-1 rounded-lg bg-white text-stone-900 shadow-sm transition cursor-pointer">
+            🌲 Biome &amp; Terrain
+          </button>
+          <button id="mode-satellite" onclick="setGlobeMode('satellite')" class="px-2.5 py-1 rounded-lg text-stone-600 hover:text-stone-900 transition cursor-pointer">
+            🛰️ High-Res Satellite
+          </button>
+          <button id="mode-dark" onclick="setGlobeMode('dark')" class="px-2.5 py-1 rounded-lg text-stone-600 hover:text-stone-900 transition cursor-pointer">
+            🔥 Thermal Night
+          </button>
+        </div>
+
+        <!-- Biome Zones ON/OFF Toggle -->
+        <button id="toggleBiomesBtn" onclick="toggleBiomeZones()" class="px-3 py-1.5 rounded-xl bg-emerald-900/10 hover:bg-emerald-900/20 text-emerald-950 text-xs font-bold border border-emerald-800/25 transition cursor-pointer">
+          🗺️ Biome Zones: ON
+        </button>
+
+        <!-- Place Labels ON/OFF Toggle -->
+        <button id="toggleLabelsBtn" onclick="togglePlaceLabels()" class="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-950 text-xs font-bold border border-amber-600/30 transition cursor-pointer">
+          🔥 Place Labels: ON
+        </button>
+
+        <!-- Focus India Button -->
+        <button onclick="focusIndia()" class="px-3 py-1.5 rounded-xl bg-white hover:bg-stone-100 text-stone-900 text-xs font-bold border border-stone-300 shadow-sm transition cursor-pointer">
+          🇮🇳 Focus India
+        </button>
+
+        <!-- Upload NASA FIRMS CSV -->
+        <label for="csvUpload" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#14532d] hover:bg-[#166534] text-white text-xs font-semibold shadow-sm transition cursor-pointer">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+          </svg>
+          <span id="uploadBtnText">Upload FIRMS .CSV</span>
+        </label>
+        <input type="file" id="csvUpload" accept=".csv" class="hidden" />
+      </div>
+
+    </div>
+  </header>
+
+  <!-- NON-BLOCKING TOAST NOTIFICATION -->
+  <div id="toastBanner" class="fixed top-20 right-6 z-50 hidden frosted-glass rounded-2xl px-4 py-3 border-l-4 border-l-emerald-700 max-w-sm transition-all">
+    <div class="flex items-start gap-2.5">
+      <span class="text-lg">🌿</span>
+      <div>
+        <h4 id="toastTitle" class="text-xs font-bold text-stone-900">NASA VIIRS Telemetry Processed</h4>
+        <p id="toastMsg" class="text-[11px] text-stone-600 mt-0.5 leading-snug"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================= -->
+  <!-- VIEW 1: 3D BIOME & WILDFIRE ATLAS (FLOATING FROSTED GLASS DRAWER)       -->
+  <!-- ======================================================================= -->
+  <section id="view-atlas" class="pointer-events-none fixed inset-0 pt-22 pb-4 px-3.5 z-20 flex flex-col md:flex-row justify-between items-start md:items-stretch gap-4 max-w-[1560px] mx-auto" style="padding-top: 84px;">
+    
+    <!-- LEFT FROSTED-GLASS DRAWER: RECONCILED WILDFIRE & BIOME CARDS -->
+    <aside class="pointer-events-auto frosted-glass rounded-3xl w-full md:w-[405px] max-h-[82vh] md:max-h-full flex flex-col overflow-hidden">
+      
+      <div class="p-4 pb-3 border-b border-stone-200/80">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] font-bold uppercase tracking-widest text-emerald-800">Reconciled Dual-Band Telemetry</span>
+          <span id="datasetBadge" class="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-900/10 text-emerald-900 border border-emerald-800/20">
+            Fire T4 &amp; Ground T5 (°C)
+          </span>
+        </div>
+        <h1 class="serif-heading text-xl font-bold text-stone-900 mt-1">Active Wildfire &amp; Biome Detections</h1>
+        <p class="text-[11.5px] text-stone-600 mt-0.5 leading-relaxed">
+          Every marker &amp; card reconciles <strong class="text-red-700">Fire Core (T4)</strong> against <strong class="text-emerald-800">Ambient Ground (T5)</strong> inside global ecological biomes.
+        </p>
+
+        <!-- Color-Coded Environmental Biome & River Legend -->
+        <div class="grid grid-cols-2 gap-1.5 mt-3 bg-white/85 p-2.5 rounded-2xl border border-stone-200/90 text-[11px] font-semibold">
+          <div class="flex items-center gap-2 text-stone-800">
+            <span class="w-3 h-3 rounded-sm shrink-0 border border-black/10" style="background:#15803d;"></span>
+            <span>Tropical Forest</span>
+          </div>
+          <div class="flex items-center gap-2 text-stone-800">
+            <span class="w-3 h-3 rounded-sm shrink-0 border border-black/10" style="background:#065f46;"></span>
+            <span>Evergreen Forest</span>
+          </div>
+          <div class="flex items-center gap-2 text-stone-800">
+            <span class="w-3 h-3 rounded-sm shrink-0 border border-black/10" style="background:#eab308;"></span>
+            <span>Arid Desert</span>
+          </div>
+          <div class="flex items-center gap-2 text-stone-800">
+            <span class="w-3 h-1.5 rounded-full shrink-0" style="background:#0284c7;"></span>
+            <span>Major River Basins</span>
+          </div>
+        </div>
+
+        <!-- Severity Filter Pills -->
+        <div class="flex flex-wrap gap-1.5 mt-2.5">
+          <button onclick="setRiskFilter('all')" id="flt-all" class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-stone-900 text-white transition cursor-pointer">
+            All (<span id="c-all">10</span>)
+          </button>
+          <button onclick="setRiskFilter('CRITICAL')" id="flt-CRITICAL" class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-red-50 text-red-800 border border-red-200 hover:bg-red-100 transition cursor-pointer">
+            🔥 Critical (<span id="c-crit">6</span>)
+          </button>
+          <button onclick="setRiskFilter('MODERATE')" id="flt-MODERATE" class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100 transition cursor-pointer">
+            🟠 Moderate (<span id="c-mod">3</span>)
+          </button>
+          <button onclick="setRiskFilter('LOW')" id="flt-LOW" class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-900 border border-emerald-200 hover:bg-emerald-100 transition cursor-pointer">
+            🟢 Low (<span id="c-low">1</span>)
+          </button>
+        </div>
+      </div>
+
+      <!-- Scrollable List of Reconciled Wildfire Cards -->
+      <div id="cardList" class="p-3 space-y-2.5 overflow-y-auto flex-1">
+        <!-- Populated dynamically via JS -->
+      </div>
+    </aside>
+
+    <!-- RIGHT FLOATING COLUMN: GLOBAL BIOME QUICK-JUMP & SDG IMPACT TELEMETRY -->
+    <div class="pointer-events-none hidden lg:flex flex-col justify-between items-end gap-3 ml-auto w-[340px]">
+      
+      <!-- Global & Regional Biome Navigator -->
+      <div class="pointer-events-auto frosted-glass rounded-3xl p-4 w-full">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[11px] font-bold uppercase tracking-widest text-emerald-800">Planetary Biome Explorer</span>
+          <span class="text-[11px] font-semibold text-stone-500">Click to Spin Globe</span>
+        </div>
+        <div class="grid grid-cols-2 gap-1.5 text-[11px] font-semibold">
+          <button onclick="flyToCoord(33.65, 74.65, 2.75)" class="p-2 rounded-xl bg-white hover:bg-emerald-50 border border-stone-200 text-left transition cursor-pointer">
+            🏔️ <strong>Himalayas &amp; J&amp;K</strong><br/><span class="text-[10px] text-stone-500">Evergreen &amp; Indus</span>
+          </button>
+          <button onclick="flyToCoord(25.40, 83.50, 2.55)" class="p-2 rounded-xl bg-white hover:bg-sky-50 border border-stone-200 text-left transition cursor-pointer">
+            🌊 <strong>Ganga-Brahmaputra</strong><br/><span class="text-[10px] text-stone-500">River Basin &amp; Delta</span>
+          </button>
+          <button onclick="flyToCoord(26.80, 71.20, 2.55)" class="p-2 rounded-xl bg-white hover:bg-amber-50 border border-stone-200 text-left transition cursor-pointer">
+            🏜️ <strong>Thar &amp; Sahara</strong><br/><span class="text-[10px] text-stone-500">Arid Desert Biomes</span>
+          </button>
+          <button onclick="flyToCoord(-4.50, -62.00, 1.85)" class="p-2 rounded-xl bg-white hover:bg-emerald-50 border border-stone-200 text-left transition cursor-pointer">
+            🌳 <strong>Amazon Rainforest</strong><br/><span class="text-[10px] text-stone-500">Tropical Basin</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Bottom-Right SDG Impact & Telemetry Card -->
+      <div class="pointer-events-auto frosted-glass rounded-3xl p-4 w-full">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-[11px] font-bold uppercase tracking-widest text-emerald-800">UN SDG 13.1 &amp; 15.2 Impact</span>
+          <span class="text-[11px] font-bold text-emerald-900 mono-num">99.24% RF Acc</span>
+        </div>
+        <h3 class="serif-heading text-base font-bold text-stone-900 mb-2.5">Canopy &amp; Radiative Summary</h3>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="card-white rounded-2xl p-2.5">
+            <div class="text-[10px] text-stone-500 font-semibold">Caught Wildfire Fronts</div>
+            <div id="k-fronts" class="serif-heading text-xl font-bold text-red-700 mt-0.5">10 Active</div>
+            <div class="text-[10px] text-stone-500">Dual-Band Verified</div>
+          </div>
+          <div class="card-white rounded-2xl p-2.5">
+            <div class="text-[10px] text-stone-500 font-semibold">Peak ΔT Thermal Spike</div>
+            <div id="k-maxdt" class="serif-heading text-xl font-bold text-amber-700 mt-0.5">+57.2 °C</div>
+            <div class="text-[10px] text-stone-500">Pir Panjal Ridge, J&amp;K</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- BOTTOM CENTER 3D GLOBE ZOOM & NAVIGATION HUD -->
+  <div class="fixed bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 frosted-glass rounded-2xl px-3 py-1.5">
+    <button onclick="zoomGlobe(1.32)" title="Zoom In on 3D Globe" class="w-8 h-8 rounded-xl bg-white hover:bg-stone-100 text-stone-900 font-bold text-base shadow-sm border border-stone-200 transition cursor-pointer">+</button>
+    <button onclick="zoomGlobe(0.76)" title="Zoom Out on 3D Globe" class="w-8 h-8 rounded-xl bg-white hover:bg-stone-100 text-stone-900 font-bold text-base shadow-sm border border-stone-200 transition cursor-pointer">−</button>
+    <div class="h-4 w-[1px] bg-stone-300 mx-1"></div>
+    <span class="text-[11px] font-semibold text-stone-700 px-1">Drag to Spin 3D Earth • Scroll to Zoom Deep into Biomes &amp; Rivers</span>
+  </div>
+
+  <!-- ======================================================================= -->
+  <!-- VIEW 2: AI & PHYSICS LAB (LIVE ΔT SIMULATOR IN °C + CURVE)              -->
+  <!-- ======================================================================= -->
+  <section id="view-lab" class="hidden fixed inset-0 pt-24 pb-6 px-4 z-30 overflow-y-auto bg-stone-950/40 backdrop-blur-sm">
+    <div class="frosted-glass rounded-3xl max-w-5xl mx-auto p-6 md:p-8 my-auto">
+      <div class="flex flex-wrap items-center justify-between gap-4 border-b border-stone-200 pb-4 mb-6">
+        <div>
+          <span class="text-xs font-bold uppercase tracking-widest text-emerald-800">Physics-Informed Random Forest Sandbox</span>
+          <h2 class="serif-heading text-2xl md:text-3xl font-bold text-stone-900 mt-1">
+            Dual-Band Thermal Contrast ($\Delta T = T_{I4} - T_{I5}$ in °C)
+          </h2>
+          <p class="text-xs text-stone-600 mt-1">
+            Why Pir Panjal (Ambient 16.2 °C, Fire 73.4 °C → ΔT +57.2 °C) is Critical: subtracting cool alpine ground temperature isolates an intense sub-pixel conifer crown fire.
+          </p>
+        </div>
+        <button onclick="switchView('atlas')" class="px-4 py-2 rounded-xl bg-stone-900 text-white text-xs font-bold hover:bg-stone-800 transition cursor-pointer">
+          ← Back to 3D Globe
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Sliders in °C -->
+        <div class="lg:col-span-5 card-white rounded-2xl p-5 flex flex-col justify-between">
+          <div>
+            <h3 class="serif-heading text-lg font-bold text-stone-900 mb-3">VIIRS 375m Infrared Channels (°C)</h3>
+            <div class="mb-4">
+              <div class="flex justify-between text-xs font-semibold mb-1">
+                <span>🔥 Fire Core Mid-IR (<code>bright_ti4</code>)</span>
+                <span id="v-ti4" class="font-bold mono-num text-red-700">73.4 °C</span>
+              </div>
+              <input type="range" id="s-ti4" min="25" max="120" step="0.2" value="73.4" class="w-full" />
+            </div>
+
+            <div class="mb-4">
+              <div class="flex justify-between text-xs font-semibold mb-1">
+                <span>🌲 Ambient Ground (<code>bright_ti5</code>)</span>
+                <span id="v-ti5" class="font-bold mono-num text-emerald-800">16.2 °C</span>
+              </div>
+              <input type="range" id="s-ti5" min="-5" max="50" step="0.2" value="16.2" class="w-full" />
+            </div>
+
+            <div class="mb-4">
+              <div class="flex justify-between text-xs font-semibold mb-1">
+                <span>⚡ Fire Radiative Power (<code>frp</code>)</span>
+                <span id="v-frp" class="font-bold mono-num text-amber-800">24.8 MW</span>
+              </div>
+              <input type="range" id="s-frp" min="1" max="80" step="0.5" value="24.8" class="w-full" />
+            </div>
+
+            <div class="mb-2">
+              <div class="flex justify-between text-xs font-semibold mb-1">
+                <span>🛰️ DBSCAN Cluster Pixels (<code>eps ≤ 3 km</code>)</span>
+                <span id="v-csize" class="font-bold mono-num">4 pixels</span>
+              </div>
+              <input type="range" id="s-csize" min="1" max="12" step="1" value="4" class="w-full" />
+            </div>
+          </div>
+
+          <button id="deploySimBtn" class="mt-4 w-full py-3 px-4 rounded-xl bg-[#14532d] hover:bg-[#166534] text-white font-bold text-xs shadow-md transition cursor-pointer">
+            📍 Plot Simulated Hotspot onto 3D Earth Globe
+          </button>
+        </div>
+
+        <!-- Spectral Curve & Classifier Output -->
+        <div class="lg:col-span-7 flex flex-col gap-5">
+          <div class="card-white rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-2">
+              <div>
+                <h3 class="serif-heading text-lg font-bold text-stone-900">Sub-Pixel Spectral Spike ($\Delta T$ in °C)</h3>
+                <p class="text-xs text-stone-500">3.74 µm Flame Channel vs. 11.45 µm Biome Surface</p>
+              </div>
+              <span id="lab-dt-badge" class="serif-heading text-2xl font-bold text-red-600 mono-num">+57.2 °C</span>
+            </div>
+            <div class="bg-[#faf8f5] border border-stone-200 rounded-xl p-3">
+              <svg viewBox="0 0 520 145" class="w-full h-36 overflow-visible">
+                <line x1="40" y1="25" x2="490" y2="25" stroke="#e7e5e4" stroke-dasharray="4 4" />
+                <line x1="40" y1="75" x2="490" y2="75" stroke="#e7e5e4" stroke-dasharray="4 4" />
+                <line x1="40" y1="120" x2="490" y2="120" stroke="#d6d3d1" />
+                <path id="svg-t5-line" d="M 40 105 Q 260 98 490 105" fill="none" stroke="#065f46" stroke-width="2.5" stroke-dasharray="6 4" />
+                <path id="svg-t4-curve" d="M 40 105 Q 190 105 230 58 Q 265 14 300 58 Q 340 105 490 105" fill="rgba(220, 38, 38, 0.14)" stroke="#dc2626" stroke-width="3" />
+                <line id="svg-dt-line" x1="265" y1="18" x2="265" y2="105" stroke="#1c1917" stroke-width="1.8" stroke-dasharray="3 3" />
+                <circle id="svg-peak-dot" cx="265" cy="18" r="5" fill="#dc2626" />
+                <text id="svg-t4-lbl" x="42" y="138" fill="#dc2626" font-size="10.5" font-weight="700">Fire Core (T4): 73.4 °C</text>
+                <text id="svg-t5-lbl" x="315" y="138" fill="#065f46" font-size="10.5" font-weight="700">Ambient Ground (T5): 16.2 °C</text>
+              </svg>
+            </div>
+          </div>
+
+          <div id="simBox" class="card-white rounded-2xl p-5 border-l-8 border-l-red-600">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-bold uppercase tracking-widest text-stone-500">Random Forest Ensemble Verdict</span>
+              <span id="simConf" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-900">99.1% Confidence</span>
+            </div>
+            <div id="simTier" class="serif-heading text-2xl font-bold text-red-700 mt-1">CRITICAL WILDFIRE FRONT</div>
+            <p id="simDetails" class="text-xs font-semibold text-stone-700 mt-1">
+              Fire Core: 73.4 °C | Ambient Ground: 16.2 °C | Thermal Spike ΔT: +57.2 °C
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================= -->
+  <!-- SELF-CONTAINED 3D SPHERICAL GLOBE, BIOME & RECONCILED TELEMETRY ENGINE  -->
+  <!-- ======================================================================= -->
+  <script>
+    function toCelsius(val) {
+      const n = parseFloat(val);
+      if (isNaN(n)) return 0;
+      return n > 180 ? +(n - 273.15).toFixed(1) : +n.toFixed(1);
+    }
+
+    // 1. Reconciled Wildfire Telemetry Dataset (Both Fire Core T4 & Ambient Ground T5 in °C)
+    let wildfires = [
+      { name: "Pir Panjal Range, J&K", shortName: "Pir Panjal, J&K", lat: 33.65, lon: 74.65, fireC: 73.4, ambientC: 16.2, frp: 24.8, c_size: 4, biome: "Himalayan Montane Evergreen Forest", risk: "CRITICAL" },
+      { name: "Garhwal Himalayas, UK", shortName: "Garhwal, UK", lat: 30.38, lon: 78.78, fireC: 75.1, ambientC: 19.4, frp: 28.4, c_size: 5, biome: "Sub-Alpine Evergreen Pine Forest", risk: "CRITICAL" },
+      { name: "Bastar Forest, Chhattisgarh", shortName: "Bastar, CG", lat: 19.12, lon: 81.95, fireC: 85.8, ambientC: 31.2, frp: 42.1, c_size: 7, biome: "Tropical Moist Deciduous Forest", risk: "CRITICAL" },
+      { name: "Similipal Biosphere, Odisha", shortName: "Similipal, OD", lat: 21.75, lon: 86.32, fireC: 78.1, ambientC: 29.8, frp: 33.6, c_size: 5, biome: "Tropical Semi-Evergreen Forest", risk: "CRITICAL" },
+      { name: "Bandipur Reserve, Karnataka", shortName: "Bandipur, KA", lat: 11.66, lon: 76.63, fireC: 71.9, ambientC: 23.7, frp: 21.5, c_size: 4, biome: "Western Ghats Tropical Forest", risk: "CRITICAL" },
+      { name: "Namdapha National Park, AR", shortName: "Namdapha, AR", lat: 27.49, lon: 96.38, fireC: 74.2, ambientC: 20.1, frp: 26.0, c_size: 4, biome: "Eastern Himalayan Evergreen Forest", risk: "CRITICAL" },
+      { name: "Kaziranga Floodplain, Assam", shortName: "Kaziranga, AS", lat: 26.58, lon: 93.17, fireC: 64.5, ambientC: 24.6, frp: 14.2, c_size: 3, biome: "Brahmaputra Riverine & Tropical Forest", risk: "MODERATE" },
+      { name: "Tadoba-Andhari, Maharashtra", shortName: "Tadoba, MH", lat: 20.22, lon: 79.35, fireC: 69.3, ambientC: 32.5, frp: 18.7, c_size: 3, biome: "Central Indian Tropical Dry Forest", risk: "MODERATE" },
+      { name: "Sariska Aravalli, Rajasthan", shortName: "Sariska, RJ", lat: 27.32, lon: 76.43, fireC: 61.8, ambientC: 34.9, frp: 11.4, c_size: 2, biome: "Thar Edge Arid Desert & Scrub", risk: "MODERATE" },
+      { name: "Sundarbans Delta, WB", shortName: "Sundarbans, WB", lat: 21.95, lon: 88.88, fireC: 56.4, ambientC: 27.3, frp: 8.9, c_size: 1, biome: "Ganga-Brahmaputra Mangrove & River Basin", risk: "LOW" }
+    ];
+
+    // 2. Unified Official Survey of India Outer Boundary Polygon
+    // Includes complete Jammu & Kashmir and Ladakh (PoK, Gilgit-Baltistan, and Aksai Chin) and Arunachal Pradesh without internal division lines
+    const indiaOfficialGeo = {
+      type: "Feature",
+      properties: { name: "India" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [[
+          [68.15, 23.65], [68.85, 24.35], [71.05, 24.40], [70.20, 26.50], [69.52, 26.85],
+          [70.80, 27.95], [71.80, 28.05], [73.05, 29.10], [73.88, 30.05], [74.52, 31.10],
+          [74.60, 31.85], [75.32, 32.30], [74.05, 32.80], [73.68, 33.40], [73.40, 34.15],
+          [73.70, 34.80], [73.15, 35.35], [72.60, 35.85], [72.70, 36.45], [73.40, 36.80],
+          [74.55, 37.08], [75.55, 36.90], [76.35, 36.30], [77.80, 35.65], [78.40, 35.85],
+          [79.45, 35.95], [80.15, 35.35], [80.32, 34.55], [79.60, 33.75], [79.05, 33.10],
+          [78.55, 32.55], [78.95, 31.80], [79.65, 31.15], [80.25, 30.75], [81.02, 30.20],
+          [80.05, 28.85], [81.20, 28.25], [82.50, 27.75], [84.05, 27.45], [85.50, 26.75],
+          [87.15, 26.60], [88.15, 26.75], [88.05, 27.35], [88.18, 27.92], [88.78, 27.95],
+          [88.92, 27.32], [89.05, 26.85], [90.40, 26.78], [91.65, 26.82], [92.10, 26.90],
+          [91.62, 27.75], [92.50, 27.95], [93.60, 28.38], [94.45, 29.15], [95.35, 29.35],
+          [96.25, 29.42], [96.60, 28.85], [97.40, 28.25], [97.35, 27.70], [96.40, 27.15],
+          [95.25, 26.65], [94.75, 25.60], [94.35, 24.40], [93.40, 23.85], [93.35, 22.90],
+          [92.95, 22.02], [92.60, 22.40], [92.25, 23.75], [91.55, 23.30], [91.20, 23.50],
+          [91.75, 24.30], [92.35, 24.98], [91.65, 25.18], [89.85, 25.25], [89.70, 25.95],
+          [88.95, 26.35], [88.40, 26.40], [88.10, 25.75], [88.55, 24.85], [88.75, 23.60],
+          [88.95, 22.15], [89.10, 21.65], [87.75, 21.62], [86.85, 20.75], [85.82, 19.78],
+          [84.80, 19.10], [83.30, 17.70], [82.25, 16.95], [80.85, 15.80], [80.15, 14.40],
+          [80.30, 13.08], [79.85, 11.75], [79.85, 10.30], [79.30, 9.28], [78.15, 8.78],
+          [77.54, 8.08], [76.55, 8.90], [76.25, 9.95], [75.78, 11.25], [74.85, 12.88],
+          [74.35, 14.60], [73.78, 15.55], [73.30, 17.00], [72.82, 18.95], [72.72, 20.20],
+          [72.90, 20.95], [72.65, 21.68], [72.18, 21.60], [71.60, 20.90], [70.35, 20.90],
+          [69.05, 22.25], [69.70, 22.50], [70.20, 22.95], [68.80, 23.20], [68.15, 23.65]
+        ]]
+      }
+    };
+    if (d3.geoArea(indiaOfficialGeo) > Math.PI) {
+      indiaOfficialGeo.geometry.coordinates[0].reverse();
+    }
+
+    // 3. Global & Regional Environmental Biomes (Tropical Forest, Evergreen Forest, Arid Desert) & Major Rivers
+    const biomePolygons = [
+      // Arid Deserts (#eab308)
+      { name: "Thar Desert", type: "Arid Desert", color: "#eab308", labelCoord: [71.2, 26.8],
+        coords: [[[68.6,24.4],[73.8,24.4],[75.2,29.4],[70.6,29.6],[68.6,24.4]]] },
+      { name: "Sahara Desert", type: "Arid Desert", color: "#eab308", labelCoord: [12.0, 23.5],
+        coords: [[[-16.0,16.5],[32.5,16.5],[32.5,31.5],[-16.0,31.5],[-16.0,16.5]]] },
+      { name: "Arabian Desert", type: "Arid Desert", color: "#eab308", labelCoord: [46.5, 23.0],
+        coords: [[[36.5,15.5],[55.5,16.5],[52.0,29.5],[38.0,30.5],[36.5,15.5]]] },
+      { name: "Gobi & Taklamakan Desert", type: "Arid Desert", color: "#eab308", labelCoord: [96.0, 41.5],
+        coords: [[[77.0,37.5],[111.0,39.5],[112.0,45.0],[78.0,42.5],[77.0,37.5]]] },
+      { name: "Great Australian Desert", type: "Arid Desert", color: "#eab308", labelCoord: [128.0, -24.5],
+        coords: [[[116.0,-29.0],[139.0,-29.0],[138.0,-19.5],[118.0,-20.0],[116.0,-29.0]]] },
+
+      // Evergreen Forests (#065f46)
+      { name: "Himalayan Evergreen Forest", type: "Evergreen Forest", color: "#065f46", labelCoord: [82.5, 30.2],
+        coords: [[[73.2,32.2],[75.5,35.2],[81.5,31.2],[88.5,28.1],[96.8,28.8],[96.2,26.8],[88.2,27.0],[79.5,29.2],[73.8,31.2],[73.2,32.2]]] },
+      { name: "Siberian Taiga Evergreen", type: "Evergreen Forest", color: "#065f46", labelCoord: [95.0, 60.0],
+        coords: [[[55.0,55.0],[135.0,55.0],[135.0,66.5],[55.0,66.5],[55.0,55.0]]] },
+      { name: "Boreal Evergreen Belt", type: "Evergreen Forest", color: "#065f46", labelCoord: [-105.0, 56.0],
+        coords: [[[-135.0,50.0],[-65.0,50.0],[-65.0,63.0],[-135.0,63.0],[-135.0,50.0]]] },
+
+      // Tropical Forests (#15803d)
+      { name: "Western Ghats & Central Tropical Forest", type: "Tropical Forest", color: "#15803d", labelCoord: [79.8, 19.8],
+        coords: [[[73.8,9.2],[76.8,9.2],[86.2,19.2],[85.5,23.2],[78.5,23.5],[75.2,18.5],[73.8,9.2]]] },
+      { name: "Northeast & Indo-Burma Tropical Forest", type: "Tropical Forest", color: "#15803d", labelCoord: [94.5, 24.5],
+        coords: [[[89.5,22.0],[97.5,20.0],[103.5,14.0],[99.0,12.5],[92.5,21.5],[89.5,22.0]]] },
+      { name: "Amazon Tropical Rainforest", type: "Tropical Forest", color: "#15803d", labelCoord: [-62.0, -5.0],
+        coords: [[[-76.5,-12.5],[-48.0,-12.5],[-48.0,4.5],[-76.5,4.5],[-76.5,-12.5]]] },
+      { name: "Congo Basin Tropical Forest", type: "Tropical Forest", color: "#15803d", labelCoord: [22.0, 0.0],
+        coords: [[[10.5,-5.5],[30.5,-5.5],[30.5,4.5],[10.5,4.5],[10.5,-5.5]]] },
+      { name: "Sundaland & Borneo Tropical Forest", type: "Tropical Forest", color: "#15803d", labelCoord: [113.5, 0.5],
+        coords: [[[96.0,-5.5],[119.0,-5.5],[119.0,6.5],[96.0,6.5],[96.0,-5.5]]] }
+    ];
+
+    // Ensure proper spherical winding order for D3 polygons
+    const biomeFeatures = biomePolygons.map(b => {
+      const feat = {
+        type: "Feature",
+        properties: { name: b.name, type: b.type, color: b.color, labelCoord: b.labelCoord },
+        geometry: { type: "Polygon", coordinates: b.coords }
+      };
+      if (d3.geoArea(feat) > Math.PI) feat.geometry.coordinates[0].reverse();
+      return feat;
+    });
+
+    // Major River Basins (#0284c7)
+    const majorRivers = [
+      { name: "Ganga River", labelCoord: [83.2, 25.5], coords: [[78.9,30.9],[78.1,29.9],[80.3,26.5],[81.8,25.4],[83.0,25.3],[85.1,25.6],[87.8,24.8],[89.2,22.5]] },
+      { name: "Brahmaputra River", labelCoord: [92.8, 26.4], coords: [[82.0,30.4],[88.5,29.3],[94.5,29.5],[95.3,27.8],[93.2,26.6],[91.7,26.1],[89.8,25.2],[89.2,22.5]] },
+      { name: "Indus River", labelCoord: [71.2, 29.8], coords: [[81.2,31.2],[77.6,34.1],[75.4,35.4],[72.8,34.2],[71.5,32.0],[70.5,29.5],[68.4,25.4],[67.6,24.0]] },
+      { name: "Narmada & Godavari", labelCoord: [78.5, 21.2], coords: [[81.7,22.7],[78.5,22.8],[75.5,22.1],[72.8,21.7]] },
+      { name: "Godavari Basin", labelCoord: [80.2, 18.2], coords: [[73.7,19.9],[77.5,19.1],[80.2,18.6],[82.2,16.8]] },
+      { name: "Nile River", labelCoord: [31.5, 24.5], coords: [[32.6,0.4],[31.6,4.8],[32.5,15.6],[32.8,24.1],[31.2,30.1],[30.4,31.4]] },
+      { name: "Amazon River", labelCoord: [-61.0, -3.2], coords: [[ -75.0,-4.5],[-69.9,-4.2],[-64.8,-3.4],[-60.0,-3.1],[-54.7,-2.4],[-49.5,-0.5]] },
+      { name: "Yangtze River", labelCoord: [112.5, 30.2], coords: [[91.0,33.4],[99.5,28.5],[104.6,28.8],[111.3,30.7],[114.3,30.6],[121.5,31.3]] }
+    ];
+
+    // 4. D3 Orthographic 3D Canvas Setup
+    const canvas = document.getElementById('globeCanvas');
+    const ctx = canvas.getContext('2d');
+    const overlayEl = document.getElementById('globeOverlay');
+    const popupContainerEl = document.getElementById('globePopupContainer');
+
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+    let dpr = window.devicePixelRatio || 1;
+    let baseScale = Math.min(width, height) * 0.43;
+    let currentZoom = 1.65;
+    let currentRotation = [-82.0, -22.5, 0]; // Centered cleanly over India
+    let globeMode = 'biome'; // 'biome' | 'satellite' | 'dark'
+    let showBiomes = true;
+    let showLabels = true;
+    let activeRiskFilter = 'all';
+    let selectedFire = null;
+    let animId = null;
+
+    const projection = d3.geoOrthographic().precision(0.25).clipAngle(90);
+    const geoPath = d3.geoPath(projection, ctx);
+    const graticule = d3.geoGraticule().step([15, 15])();
+
+    let worldLand = null;
+    let worldBorders = null;
+
+    // Immediate fallback land geometry so 3D Earth renders instantaneously
+    const fallbackLand = {
+      type: "FeatureCollection",
+      features: [
+        indiaOfficialGeo,
+        {
+          type: "Feature",
+          geometry: {
+            type: "Polygon",
+            coordinates: [[[79.8,9.8],[80.8,9.3],[81.8,7.5],[81.2,6.1],[80.1,6.0],[79.7,7.5],[79.8,9.8]]]
+          }
+        }
+      ]
+    };
+
+    // Load global 110m countries TopoJSON for full planetary 3D rotation
+    fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
+      .then(r => r.json())
+      .then(topo => {
+        worldLand = topojson.feature(topo, topo.objects.land);
+        worldBorders = topojson.mesh(topo, topo.objects.countries, (a, b) => a !== b);
+        drawGlobe();
+      })
+      .catch(() => {
+        worldLand = fallbackLand;
+        drawGlobe();
+      });
+
+    // Deterministic orbital stars
+    const stars = Array.from({ length: 180 }, (_, i) => ({
+      x: ((Math.sin(i * 78.233) * 43758.5453) % 1 + 1) % 1,
+      y: ((Math.cos(i * 45.164) * 23421.6312) % 1 + 1) % 1,
+      r: (i % 3 === 0) ? 1.45 : 0.85,
+      a: 0.28 + ((i % 5) * 0.12)
+    }));
+
+    function resizeCanvas() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      dpr = window.devicePixelRatio || 1;
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      baseScale = Math.min(width, height) * 0.43;
+      drawGlobe();
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    function isVisible(lon, lat) {
+      const centerLon = -currentRotation[0];
+      const centerLat = -currentRotation[1];
+      return d3.geoDistance([lon, lat], [centerLon, centerLat]) <= (Math.PI / 2 - 0.02);
+    }
+
+    const palettes = {
+      biome: {
+        spaceIn: '#182b3a', spaceOut: '#091018',
+        oceanIn: '#bae6fd', oceanMid: '#38bdf8', oceanOut: '#0369a1',
+        landFill: '#e7e2d0', landStroke: '#78716c',
+        border: 'rgba(68, 64, 60, 0.32)',
+        graticule: 'rgba(12, 74, 110, 0.14)',
+        atmo: 'rgba(56, 189, 248, 0.35)',
+        indiaStroke: '#14532d'
+      },
+      satellite: {
+        spaceIn: '#112233', spaceOut: '#060b12',
+        oceanIn: '#164e63', oceanMid: '#0c354c', oceanOut: '#061a29',
+        landFill: '#1f4228', landStroke: '#4d7c55',
+        border: 'rgba(209, 250, 229, 0.25)',
+        graticule: 'rgba(148, 197, 233, 0.12)',
+        atmo: 'rgba(56, 189, 248, 0.34)',
+        indiaStroke: '#86efac'
+      },
+      dark: {
+        spaceIn: '#090d16', spaceOut: '#030508',
+        oceanIn: '#0c1526', oceanMid: '#070d19', oceanOut: '#03060d',
+        landFill: '#141d2e', landStroke: '#2d3e59',
+        border: 'rgba(148, 163, 184, 0.22)',
+        graticule: 'rgba(56, 189, 248, 0.10)',
+        atmo: 'rgba(234, 88, 12, 0.32)',
+        indiaStroke: '#f59e0b'
+      }
+    };
+
+    function drawGlobe() {
+      const pal = palettes[globeMode] || palettes.biome;
+      const cx = width / 2 + 65; // Offset slightly right to balance left frosted drawer
+      const cy = height / 2 + 16;
+      const radius = baseScale * currentZoom;
+
+      projection.translate([cx, cy]).scale(radius).rotate(currentRotation);
+
+      ctx.save();
+      ctx.scale(dpr, dpr);
+
+      // 1. Orbital Space Backdrop
+      const spaceGrad = ctx.createRadialGradient(cx, cy, radius * 0.35, cx, cy, Math.max(width, height) * 0.9);
+      spaceGrad.addColorStop(0, pal.spaceIn);
+      spaceGrad.addColorStop(1, pal.spaceOut);
+      ctx.fillStyle = spaceGrad;
+      ctx.fillRect(0, 0, width, height);
+
+      stars.forEach(s => {
+        ctx.beginPath();
+        ctx.arc(s.x * width, s.y * height, s.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 253, 249, ${s.a})`;
+        ctx.fill();
+      });
+
+      // 2. Atmospheric Rim Glow
+      const atmo = ctx.createRadialGradient(cx, cy, radius * 0.94, cx, cy, radius * 1.13);
+      atmo.addColorStop(0, pal.atmo);
+      atmo.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * 1.13, 0, Math.PI * 2);
+      ctx.fillStyle = atmo;
+      ctx.fill();
+
+      // 3. 3D Spherical Ocean
+      const ocean = ctx.createRadialGradient(cx - radius * 0.28, cy - radius * 0.28, radius * 0.08, cx, cy, radius);
+      ocean.addColorStop(0, pal.oceanIn);
+      ocean.addColorStop(0.55, pal.oceanMid);
+      ocean.addColorStop(1, pal.oceanOut);
+      ctx.beginPath();
+      geoPath({ type: 'Sphere' });
+      ctx.fillStyle = ocean;
+      ctx.fill();
+
+      // 4. Lat/Lon Graticule
+      ctx.beginPath();
+      geoPath(graticule);
+      ctx.strokeStyle = pal.graticule;
+      ctx.lineWidth = 0.75;
+      ctx.stroke();
+
+      // 5. Global Landmasses
+      ctx.beginPath();
+      geoPath(worldLand || fallbackLand);
+      ctx.fillStyle = pal.landFill;
+      ctx.fill();
+      ctx.strokeStyle = pal.landStroke;
+      ctx.lineWidth = 1.0;
+      ctx.stroke();
+
+      // 6. International Borders
+      if (worldBorders) {
+        ctx.beginPath();
+        geoPath(worldBorders);
+        ctx.strokeStyle = pal.border;
+        ctx.lineWidth = 0.7;
+        ctx.stroke();
+      }
+
+      // 7. Unified Official Survey of India Boundary (includes PoK, Gilgit-Baltistan, Aksai Chin & Arunachal Pradesh)
+      ctx.beginPath();
+      geoPath(indiaOfficialGeo);
+      ctx.fillStyle = pal.landFill; // Masks any internal disputed lines inside J&K/Ladakh
+      ctx.fill();
+      ctx.strokeStyle = pal.indiaStroke;
+      ctx.lineWidth = 1.85;
+      ctx.stroke();
+
+      // 8. Environmental Biomes & Major River Basins (when Biome Zones: ON)
+      if (showBiomes) {
+        biomeFeatures.forEach(feat => {
+          ctx.beginPath();
+          geoPath(feat);
+          ctx.fillStyle = feat.properties.color + (globeMode === 'biome' ? '52' : '44');
+          ctx.fill();
+          ctx.strokeStyle = feat.properties.color;
+          ctx.lineWidth = 1.1;
+          ctx.stroke();
+
+          // Render subtle Biome Label when zoomed in enough
+          if (currentZoom >= 1.35 && isVisible(feat.properties.labelCoord[0], feat.properties.labelCoord[1])) {
+            const bPt = projection(feat.properties.labelCoord);
+            if (bPt) {
+              ctx.font = '700 9.5px "Plus Jakarta Sans", sans-serif';
+              ctx.textAlign = 'center';
+              ctx.fillStyle = globeMode === 'biome' ? 'rgba(28, 25, 23, 0.78)' : 'rgba(255, 253, 249, 0.85)';
+              ctx.fillText(feat.properties.name.toUpperCase(), bPt[0], bPt[1]);
+              ctx.textAlign = 'left';
+            }
+          }
+        });
+
+        // Major Rivers (#0284c7)
+        majorRivers.forEach(riv => {
+          ctx.beginPath();
+          geoPath({ type: 'LineString', coordinates: riv.coords });
+          ctx.strokeStyle = '#0284c7';
+          ctx.lineWidth = Math.max(2.0, currentZoom * 1.35);
+          ctx.lineCap = 'round';
+          ctx.stroke();
+
+          if (currentZoom >= 1.45 && isVisible(riv.labelCoord[0], riv.labelCoord[1])) {
+            const rPt = projection(riv.labelCoord);
+            if (rPt) {
+              ctx.font = 'italic 700 9.5px "Plus Jakarta Sans", sans-serif';
+              ctx.fillStyle = globeMode === 'biome' ? '#0369a1' : '#7dd3fc';
+              ctx.fillText(`〰 ${riv.name}`, rPt[0] + 4, rPt[1] - 3);
+            }
+          }
+        });
+      }
+
+      // 9. Reconciled Wildfire Hotspots & Dual-Band Temperature Pins
+      const filteredFires = activeRiskFilter === 'all'
+        ? wildfires
+        : wildfires.filter(w => w.risk === activeRiskFilter);
+
+      const labelBoxes = [];
+
+      filteredFires.forEach(w => {
+        if (!isVisible(w.lon, w.lat)) return;
+        const pt = projection([w.lon, w.lat]);
+        if (!pt) return;
+
+        // Spherical DBSCAN fire-front perimeter ring
+        if (w.c_size >= 2) {
+          const degRad = Math.min(1.6, 0.24 + w.c_size * 0.16);
+          const circleGeo = d3.geoCircle().center([w.lon, w.lat]).radius(degRad)();
+          ctx.beginPath();
+          geoPath(circleGeo);
+          ctx.fillStyle = w.risk === 'CRITICAL' ? 'rgba(220, 38, 38, 0.22)' : 'rgba(217, 119, 6, 0.18)';
+          ctx.fill();
+          ctx.strokeStyle = w.risk === 'CRITICAL' ? '#dc2626' : '#d97706';
+          ctx.lineWidth = 1.1;
+          ctx.stroke();
+        }
+
+        const pinColor = w.risk === 'CRITICAL' ? '#dc2626' : w.risk === 'MODERATE' ? '#d97706' : '#059669';
+        const r = w.risk === 'CRITICAL' ? 7.2 : w.risk === 'MODERATE' ? 6.0 : 5.0;
+
+        // Hotspot Marker
+        ctx.beginPath();
+        ctx.arc(pt[0], pt[1], r + 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = w.risk === 'CRITICAL' ? 'rgba(220, 38, 38, 0.30)' : 'rgba(217, 119, 6, 0.25)';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(pt[0], pt[1], r, 0, Math.PI * 2);
+        ctx.fillStyle = pinColor;
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(pt[0], pt[1], r * 0.38, 0, Math.PI * 2);
+        ctx.fillStyle = '#fef08a';
+        ctx.fill();
+
+        // Reconciled Place + Dual-Band Temperature Callout Pill on 3D Globe
+        if (showLabels) {
+          const dt = (w.fireC - w.ambientC).toFixed(1);
+          const pillText = `🔥 ${w.shortName} • Fire ${w.fireC}°C | Amb ${w.ambientC}°C`;
+          ctx.font = '700 10px "Plus Jakarta Sans", sans-serif';
+          const tw = ctx.measureText(pillText).width;
+          const pw = tw + 12;
+          const ph = 18;
+
+          const offsets = [
+            { dx: 11, dy: -11 },
+            { dx: 11, dy: 12 },
+            { dx: -pw - 11, dy: -11 },
+            { dx: -pw - 11, dy: 12 },
+            { dx: -pw / 2, dy: -23 },
+            { dx: -pw / 2, dy: 21 }
+          ];
+          let chosen = offsets[0];
+          for (const c of offsets) {
+            const bx = pt[0] + c.dx;
+            const by = pt[1] + c.dy - ph / 2;
+            const hit = labelBoxes.some(b => bx < b.x + b.w + 3 && bx + pw + 3 > b.x && by < b.y + b.h + 2 && by + ph + 2 > b.y);
+            if (!hit) { chosen = c; break; }
+          }
+
+          const bx = pt[0] + chosen.dx;
+          const by = pt[1] + chosen.dy - ph / 2;
+          labelBoxes.push({ x: bx, y: by, w: pw, h: ph });
+
+          ctx.beginPath();
+          ctx.moveTo(pt[0], pt[1]);
+          ctx.lineTo(bx + (chosen.dx >= 0 ? 0 : pw), by + ph / 2);
+          ctx.strokeStyle = pinColor;
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+
+          ctx.beginPath();
+          if (ctx.roundRect) ctx.roundRect(bx, by, pw, ph, 6);
+          else ctx.rect(bx, by, pw, ph);
+          ctx.fillStyle = w.risk === 'CRITICAL' ? 'rgba(127, 29, 29, 0.94)' : w.risk === 'MODERATE' ? 'rgba(120, 53, 15, 0.92)' : 'rgba(6, 78, 59, 0.92)';
+          ctx.fill();
+          ctx.strokeStyle = w.risk === 'CRITICAL' ? '#fca5a5' : w.risk === 'MODERATE' ? '#fcd34d' : '#6ee7b7';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.fillStyle = '#fffdf9';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(pillText, bx + 6, by + ph / 2 + 0.5);
+        }
+      });
+
+      // 10. Outer Sphere Rim
+      ctx.beginPath();
+      geoPath({ type: 'Sphere' });
+      ctx.strokeStyle = 'rgba(148, 197, 233, 0.35)';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+
+      ctx.restore();
+      syncOverlays(filteredFires);
+    }
+
+    function syncOverlays(filteredFires) {
+      overlayEl.innerHTML = '';
+      filteredFires.filter(w => w.risk === 'CRITICAL').forEach(w => {
+        if (!isVisible(w.lon, w.lat)) return;
+        const pt = projection([w.lon, w.lat]);
+        if (!pt) return;
+        const el = document.createElement('div');
+        el.className = 'globe-crit-pulse';
+        el.style.left = `${pt[0]}px`;
+        el.style.top = `${pt[1]}px`;
+        el.onclick = (e) => {
+          e.stopPropagation();
+          flyToCoord(w.lat, w.lon, 2.8, w);
+        };
+        overlayEl.appendChild(el);
+      });
+
+      if (selectedFire) {
+        const card = document.getElementById('activePopup');
+        if (card) {
+          if (!isVisible(selectedFire.lon, selectedFire.lat)) {
+            card.style.opacity = '0';
+            card.style.pointerEvents = 'none';
+          } else {
+            const pt = projection([selectedFire.lon, selectedFire.lat]);
+            if (pt) {
+              const x = Math.max(180, Math.min(width - 180, pt[0]));
+              const y = Math.max(140, Math.min(height - 170, pt[1] - 18));
+              card.style.opacity = '1';
+              card.style.pointerEvents = 'auto';
+              card.style.left = `${x}px`;
+              card.style.top = `${y}px`;
+            }
+          }
+        }
+      }
+    }
+
+    // Drag-to-Spin & Wheel-to-Zoom
+    let dragging = false;
+    let dragStart = [0, 0];
+    let rotStart = [0, 0, 0];
+
+    canvas.addEventListener('pointerdown', e => {
+      if (animId) cancelAnimationFrame(animId);
+      dragging = true;
+      dragStart = [e.clientX, e.clientY];
+      rotStart = [...currentRotation];
+      canvas.setPointerCapture(e.pointerId);
+    });
+
+    canvas.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      const dx = e.clientX - dragStart[0];
+      const dy = e.clientY - dragStart[1];
+      const sens = 0.26 / Math.sqrt(currentZoom);
+      currentRotation[0] = rotStart[0] + dx * sens;
+      currentRotation[1] = Math.max(-75, Math.min(75, rotStart[1] - dy * sens));
+      drawGlobe();
+    });
+
+    canvas.addEventListener('pointerup', e => {
+      if (!dragging) return;
+      dragging = false;
+      if (Math.hypot(e.clientX - dragStart[0], e.clientY - dragStart[1]) < 5) {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        let hit = null;
+        let best = 18;
+        wildfires.forEach(w => {
+          if (!isVisible(w.lon, w.lat)) return;
+          const pt = projection([w.lon, w.lat]);
+          if (!pt) return;
+          const d = Math.hypot(pt[0] - mx, pt[1] - my);
+          if (d < best) { best = d; hit = w; }
+        });
+        if (hit) openPopup(hit);
+        else closePopup();
+      }
+    });
+
+    canvas.addEventListener('wheel', e => {
+      e.preventDefault();
+      zoomGlobe(e.deltaY < 0 ? 1.15 : 0.87);
+    }, { passive: false });
+
+    function zoomGlobe(factor) {
+      currentZoom = Math.max(0.75, Math.min(6.0, currentZoom * factor));
+      drawGlobe();
+    }
+
+    function flyToCoord(lat, lon, targetZoom = 2.75, fireToOpen = null) {
+      if (animId) cancelAnimationFrame(animId);
+      const sRot = [...currentRotation];
+      const eRot = [-lon, -lat, 0];
+      const sZoom = currentZoom;
+      const t0 = performance.now();
+      const dur = 900;
+
+      function step(now) {
+        const t = Math.min(1, (now - t0) / dur);
+        const ease = 1 - Math.pow(1 - t, 3);
+        currentRotation[0] = sRot[0] + (eRot[0] - sRot[0]) * ease;
+        currentRotation[1] = sRot[1] + (eRot[1] - sRot[1]) * ease;
+        currentZoom = sZoom + (targetZoom - sZoom) * ease;
+        drawGlobe();
+        if (t < 1) animId = requestAnimationFrame(step);
+        else if (fireToOpen) openPopup(fireToOpen);
+      }
+      animId = requestAnimationFrame(step);
+    }
+
+    function focusIndia() {
+      closePopup();
+      flyToCoord(22.5, 82.0, 1.65);
+    }
+
+    function openPopup(w) {
+      selectedFire = w;
+      const dt = (w.fireC - w.ambientC).toFixed(1);
+      const badgeCls = w.risk === 'CRITICAL'
+        ? 'bg-red-100 text-red-900 border-red-300'
+        : w.risk === 'MODERATE'
+          ? 'bg-amber-100 text-amber-900 border-amber-300'
+          : 'bg-emerald-100 text-emerald-900 border-emerald-300';
+
+      popupContainerEl.innerHTML = `
+        <div id="activePopup" class="globe-popup-card absolute -translate-x-1/2 -translate-y-full min-w-[270px] max-w-[310px]">
+          <button onclick="closePopup()" class="absolute top-2.5 right-2.5 w-6 h-6 rounded-full bg-stone-200 hover:bg-stone-300 text-stone-700 font-bold text-xs flex items-center justify-center cursor-pointer">✕</button>
+          <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badgeCls}">${w.risk} WILDFIRE</span>
+          <h4 class="serif-heading text-base font-bold text-stone-900 mt-1.5 pr-6">${w.name}</h4>
+          <div class="text-[11px] font-semibold text-emerald-800 mt-0.5">🌿 ${w.biome}</div>
+          <div class="grid grid-cols-3 gap-1.5 my-2.5 bg-stone-100 p-2 rounded-xl border border-stone-200 text-center text-[11px]">
+            <div><span class="text-stone-500 block text-[10px]">🔥 Fire (T4)</span><strong class="text-red-700 mono-num">${w.fireC}°C</strong></div>
+            <div><span class="text-stone-500 block text-[10px]">🌲 Ambient (T5)</span><strong class="text-emerald-900 mono-num">${w.ambientC}°C</strong></div>
+            <div><span class="text-stone-500 block text-[10px]">📈 Spike ΔT</span><strong class="text-stone-900 mono-num">+${dt}°C</strong></div>
+          </div>
+          <div class="text-[10.5px] text-stone-600 mono-num">
+            Coords: ${w.lat.toFixed(2)}°N, ${w.lon.toFixed(2)}°E • FRP: <strong>${w.frp} MW</strong> • ${w.c_size} px cluster
+          </div>
+        </div>
+      `;
+      drawGlobe();
+    }
+
+    function closePopup() {
+      selectedFire = null;
+      popupContainerEl.innerHTML = '';
+    }
+
+    function setGlobeMode(mode) {
+      globeMode = mode;
+      ['biome', 'satellite', 'dark'].forEach(m => {
+        const btn = document.getElementById('mode-' + m);
+        if (!btn) return;
+        btn.className = (m === mode)
+          ? 'px-2.5 py-1 rounded-lg bg-white text-stone-900 shadow-sm transition cursor-pointer'
+          : 'px-2.5 py-1 rounded-lg text-stone-600 hover:text-stone-900 transition cursor-pointer';
+      });
+      drawGlobe();
+    }
+
+    function toggleBiomeZones() {
+      showBiomes = !showBiomes;
+      const btn = document.getElementById('toggleBiomesBtn');
+      btn.textContent = `🗺️ Biome Zones: ${showBiomes ? 'ON' : 'OFF'}`;
+      drawGlobe();
+    }
+
+    function togglePlaceLabels() {
+      showLabels = !showLabels;
+      const btn = document.getElementById('toggleLabelsBtn');
+      btn.textContent = `🔥 Place Labels: ${showLabels ? 'ON' : 'OFF'}`;
+      drawGlobe();
+    }
+
+    function switchView(view) {
+      ['atlas', 'lab'].forEach(v => {
+        const el = document.getElementById('view-' + v);
+        const tab = document.getElementById('tab-' + v);
+        if (v === view) {
+          el.classList.remove('hidden');
+          tab.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-stone-900 shadow-sm cursor-pointer';
+        } else {
+          el.classList.add('hidden');
+          tab.className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all text-stone-600 hover:text-stone-900 cursor-pointer';
+        }
+      });
+    }
+
+    function setRiskFilter(risk) {
+      activeRiskFilter = risk;
+      ['all', 'CRITICAL', 'MODERATE', 'LOW'].forEach(r => {
+        const btn = document.getElementById('flt-' + r);
+        if (!btn) return;
+        if (r === risk) {
+          btn.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-stone-900 text-white transition cursor-pointer';
+        } else if (r === 'CRITICAL') {
+          btn.className = 'px-2.5 py-1 rounded-full text-[11px] font-semibold bg-red-50 text-red-800 border border-red-200 hover:bg-red-100 transition cursor-pointer';
+        } else if (r === 'MODERATE') {
+          btn.className = 'px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100 transition cursor-pointer';
+        } else if (r === 'LOW') {
+          btn.className = 'px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-900 border border-emerald-200 hover:bg-emerald-100 transition cursor-pointer';
+        } else {
+          btn.className = 'px-2.5 py-1 rounded-full text-[11px] font-semibold bg-stone-200/80 text-stone-700 hover:bg-stone-300 transition cursor-pointer';
+        }
+      });
+      renderSidebarCards();
+      drawGlobe();
+    }
+
+    function renderSidebarCards() {
+      const list = document.getElementById('cardList');
+      list.innerHTML = '';
+
+      document.getElementById('c-all').textContent = wildfires.length;
+      document.getElementById('c-crit').textContent = wildfires.filter(w => w.risk === 'CRITICAL').length;
+      document.getElementById('c-mod').textContent = wildfires.filter(w => w.risk === 'MODERATE').length;
+      document.getElementById('c-low').textContent = wildfires.filter(w => w.risk === 'LOW').length;
+      document.getElementById('k-fronts').textContent = `${wildfires.length} Active`;
+
+      const maxDtItem = wildfires.reduce((best, cur) => (cur.fireC - cur.ambientC) > (best.fireC - best.ambientC) ? cur : best, wildfires[0]);
+      document.getElementById('k-maxdt').textContent = `+${(maxDtItem.fireC - maxDtItem.ambientC).toFixed(1)} °C`;
+
+      const filtered = activeRiskFilter === 'all'
+        ? wildfires
+        : wildfires.filter(w => w.risk === activeRiskFilter);
+
+      filtered.forEach(w => {
+        const dt = (w.fireC - w.ambientC).toFixed(1);
+        const tagBg = w.risk === 'CRITICAL' ? 'bg-red-600' : w.risk === 'MODERATE' ? 'bg-amber-600' : 'bg-emerald-700';
+        const card = document.createElement('div');
+        card.className = 'card-white rounded-2xl p-3 cursor-pointer';
+        card.innerHTML = `
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-bold text-[13px] text-stone-900">${w.name}</span>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full text-white ${tagBg}">${w.risk}</span>
+          </div>
+          <div class="text-[11px] font-semibold text-emerald-800 mt-1">🌿 ${w.biome}</div>
+          <div class="grid grid-cols-3 gap-1 mt-2 bg-stone-100 px-2.5 py-1.5 rounded-xl text-[11px] mono-num">
+            <span>🔥 Fire: <strong class="text-red-700">${w.fireC}°C</strong></span>
+            <span>🌲 Amb: <strong class="text-emerald-900">${w.ambientC}°C</strong></span>
+            <span class="text-right">ΔT: <strong>+${dt}°C</strong></span>
+          </div>
+        `;
+        card.onclick = () => flyToCoord(w.lat, w.lon, 2.85, w);
+        list.appendChild(card);
+      });
+    }
+
+    // 5. AI & Physics Lab Live Simulator in °C
+    function updateLab() {
+      const t4 = parseFloat(document.getElementById('s-ti4').value);
+      const t5 = parseFloat(document.getElementById('s-ti5').value);
+      const frp = parseFloat(document.getElementById('s-frp').value);
+      const csize = parseInt(document.getElementById('s-csize').value, 10);
+      const dt = +(t4 - t5).toFixed(1);
+
+      document.getElementById('v-ti4').textContent = `${t4.toFixed(1)} °C`;
+      document.getElementById('v-ti5').textContent = `${t5.toFixed(1)} °C`;
+      document.getElementById('v-frp').textContent = `${frp.toFixed(1)} MW`;
+      document.getElementById('v-csize').textContent = `${csize} pixels`;
+      document.getElementById('lab-dt-badge').textContent = `${dt >= 0 ? '+' : ''}${dt.toFixed(1)} °C`;
+
+      document.getElementById('svg-t4-lbl').textContent = `Fire Core (T4): ${t4.toFixed(1)} °C`;
+      document.getElementById('svg-t5-lbl').textContent = `Ambient Ground (T5): ${t5.toFixed(1)} °C`;
+
+      const t5Y = Math.max(55, Math.min(115, 114 - (t5 * 0.85)));
+      const peakY = Math.max(12, Math.min(108, t5Y - (Math.max(0, dt) * 1.25)));
+      document.getElementById('svg-t5-line').setAttribute('d', `M 40 ${t5Y} Q 260 ${t5Y - 6} 490 ${t5Y}`);
+      document.getElementById('svg-t4-curve').setAttribute('d', `M 40 ${t5Y} Q 190 ${t5Y} 230 ${(t5Y + peakY) / 2} Q 265 ${peakY} 300 ${(t5Y + peakY) / 2} Q 340 ${t5Y} 490 ${t5Y}`);
+      document.getElementById('svg-dt-line').setAttribute('y1', peakY + 4);
+      document.getElementById('svg-dt-line').setAttribute('y2', t5Y);
+      document.getElementById('svg-peak-dot').setAttribute('cy', peakY + 4);
+
+      const box = document.getElementById('simBox');
+      const tier = document.getElementById('simTier');
+      const details = document.getElementById('simDetails');
+      details.textContent = `Fire Core: ${t4.toFixed(1)} °C | Ambient Ground: ${t5.toFixed(1)} °C | Thermal Spike ΔT: ${dt >= 0 ? '+' : ''}${dt.toFixed(1)} °C`;
+
+      if (frp >= 15 || (dt >= 45 && csize >= 3)) {
+        box.className = 'card-white rounded-2xl p-5 border-l-8 border-l-red-600';
+        tier.className = 'serif-heading text-2xl font-bold text-red-700 mt-1';
+        tier.textContent = 'CRITICAL WILDFIRE FRONT';
+      } else if (frp >= 5 || dt >= 32 || csize >= 2) {
+        box.className = 'card-white rounded-2xl p-5 border-l-8 border-l-amber-500';
+        tier.className = 'serif-heading text-2xl font-bold text-amber-700 mt-1';
+        tier.textContent = 'MODERATE BIOMASS BURN';
+      } else {
+        box.className = 'card-white rounded-2xl p-5 border-l-8 border-l-emerald-700';
+        tier.className = 'serif-heading text-2xl font-bold text-emerald-800 mt-1';
+        tier.textContent = 'LOW THERMAL ANOMALY';
+      }
+    }
+
+    ['s-ti4', 's-ti5', 's-frp', 's-csize'].forEach(id => document.getElementById(id).addEventListener('input', updateLab));
+    updateLab();
+
+    document.getElementById('deploySimBtn').addEventListener('click', () => {
+      const t4 = parseFloat(document.getElementById('s-ti4').value);
+      const t5 = parseFloat(document.getElementById('s-ti5').value);
+      const frp = parseFloat(document.getElementById('s-frp').value);
+      const csize = parseInt(document.getElementById('s-csize').value, 10);
+      const dt = +(t4 - t5).toFixed(1);
+      const risk = (frp >= 15 || (dt >= 45 && csize >= 3)) ? 'CRITICAL' : (frp >= 5 || dt >= 32 || csize >= 2) ? 'MODERATE' : 'LOW';
+      const newPoint = {
+        name: "Satpura Simulated Front, MP",
+        shortName: "Satpura Sim, MP",
+        lat: 22.48,
+        lon: 78.42,
+        fireC: t4,
+        ambientC: t5,
+        frp,
+        c_size: csize,
+        biome: "Central Indian Tropical Moist Forest",
+        risk
+      };
+      wildfires.unshift(newPoint);
+      switchView('atlas');
+      renderSidebarCards();
+      flyToCoord(newPoint.lat, newPoint.lon, 2.85, newPoint);
+    });
+
+    // 6. NASA FIRMS CSV Uploader (Converts Kelvin to °C automatically)
+    document.getElementById('csvUpload').addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const lines = ev.target.result.trim().split(/\r?\n/);
+        if (lines.length < 2) return;
+        const headers = lines[0].split(',').map(h => h.trim());
+        const idx = name => headers.indexOf(name);
+        const imported = [];
+        for (let i = 1; i < Math.min(lines.length, 45); i++) {
+          const cols = lines[i].split(',');
+          if (cols.length < 10) continue;
+          const lat = parseFloat(cols[idx('latitude')]);
+          const lon = parseFloat(cols[idx('longitude')]);
+          const fireC = toCelsius(cols[idx('bright_ti4')]);
+          const ambientC = toCelsius(cols[idx('bright_ti5')]);
+          const frp = parseFloat(cols[idx('frp')]) || 4.0;
+          if (isNaN(lat) || isNaN(lon)) continue;
+          const dt = +(fireC - ambientC).toFixed(1);
+          const risk = (frp >= 15 || dt >= 45) ? 'CRITICAL' : (frp >= 5 || dt >= 32) ? 'MODERATE' : 'LOW';
+          imported.push({
+            name: `VIIRS Sector (${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E)`,
+            shortName: `${lat.toFixed(1)}°N, ${lon.toFixed(1)}°E`,
+            lat, lon, fireC, ambientC, frp: +frp.toFixed(1),
+            c_size: risk === 'CRITICAL' ? 4 : 2,
+            biome: lat > 29 ? "Himalayan Evergreen Forest" : (lon < 74 && lat > 24) ? "Thar Arid Desert" : "South Asian Tropical Forest",
+            risk
+          });
+        }
+        if (imported.length > 0) {
+          wildfires = imported;
+          renderSidebarCards();
+          drawGlobe();
+          const banner = document.getElementById('toastBanner');
+          document.getElementById('toastTitle').textContent = `Ingested ${file.name}`;
+          document.getElementById('toastMsg').textContent = `Reconciled ${imported.length} NASA VIIRS detections into Fire Core (°C) & Ambient Ground (°C) on the 3D Globe.`;
+          banner.classList.remove('hidden');
+          setTimeout(() => banner.classList.add('hidden'), 6000);
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    resizeCanvas();
+    renderSidebarCards();
+  </script>
+</body>
+</html>
